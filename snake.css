@@ -87,7 +87,7 @@ body {
 /* On-screen Controls (only visible on mobile) */
 .controls {
     position: absolute;
-    bottom: 5%;
+    bottom: 10%;
     display: flex;
     flex-direction: column;
     align-items: center;
