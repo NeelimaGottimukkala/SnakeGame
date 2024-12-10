@@ -59,8 +59,8 @@ body {
 @media (max-width: 768px) {
     #board {
         margin-bottom: 70px;
-        width: 90vmin; 
-        height: 90vmin; 
+        width: 85vmin; 
+        height: 85vmin; 
     }
 }
 
