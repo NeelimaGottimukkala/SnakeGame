@@ -9,10 +9,44 @@
 </head>
 <body>
     <div class="body">
-        <div id="board">
-                 
-         </div>
+        <div id="board"></div>
+
+        <!-- Score Display -->
+        <div id="scorebox">Score: 0</div>
+        <div id="gameOverModal" class="modal">
+            <div class="modal-content">
+                <h2>Congratulations!</h2>
+                <p>You scored: <span id="finalScore">0</span></p>
+                <button id="playAgainBtn">Play Again</button>
+            </div>
+        </div>
+
+        <!-- On-screen Controls -->
+        <div class="controls">
+            <button id="up">↑</button>
+            <div class="horizontal-controls">
+                <button id="left">←</button>
+                <button id="right">→</button>
+            </div>
+            <button id="down">↓</button>
+        </div>
     </div>
+
     <script src="snake.js"></script>
+    <script>
+       // JavaScript for on-screen controls
+const controls = {
+    up: document.getElementById("up"),
+    down: document.getElementById("down"),
+    left: document.getElementById("left"),
+    right: document.getElementById("right"),
+};
+
+controls.up.addEventListener("click", () => (inputDir = { x: 0, y: -1 }));
+controls.down.addEventListener("click", () => (inputDir = { x: 0, y: 1 }));
+controls.left.addEventListener("click", () => (inputDir = { x: -1, y: 0 }));
+controls.right.addEventListener("click", () => (inputDir = { x: 1, y: 0 }));
+    </script>
 </body>
 </html>
+
