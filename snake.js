@@ -141,4 +141,5 @@ playAgainBtn.addEventListener('click', () => {
 
 // Start the game loop
 window.requestAnimationFrame(main);
+#hi
 
