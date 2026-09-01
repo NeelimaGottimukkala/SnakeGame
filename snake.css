@@ -560,3 +560,74 @@ After creating the project, explain:
 7. How to test it using Postman.
 
 Most importantly, build the complete application files directly. Do not just give me sample code or an explanation.
+
+
+
+
+VERIZON API ENVIRONMENT CONFIGURATION:
+
+The application should support the following Verizon environments.
+
+SIT:
+https://vxpvagg-k18v-nssit3.ebiz.verizon.com/browsing-services/graphql
+
+DIT:
+https://vxpvagg-k18v-nsdit.ebiz.verizon.com/browsing-services/graphql
+
+SIT2:
+https://vxpvagg-k18v-nssit2.ebiz.verizon.com/browsing-services/graphql
+
+Environment mapping:
+
+SIT  → vxpvagg-k18v-nssit3.ebiz.verizon.com
+DIT  → vxpvagg-k18v-nsdit.ebiz.verizon.com
+SIT2 → vxpvagg-k18v-nssit2.ebiz.verizon.com
+
+Common GraphQL API path:
+/browsing-services/graphql
+
+When the user selects an environment from the UI, automatically construct the API URL using the corresponding hostname and this GraphQL path.
+
+For example:
+
+SIT selected:
+https://vxpvagg-k18v-nssit3.ebiz.verizon.com/browsing-services/graphql
+
+DIT selected:
+https://vxpvagg-k18v-nsdit.ebiz.verizon.com/browsing-services/graphql
+
+SIT2 selected:
+https://vxpvagg-k18v-nssit2.ebiz.verizon.com/browsing-services/graphql
+
+IMPORTANT:
+Do not hard-code authentication tokens in the frontend.
+The API requires the appropriate authentication headers/JWT and other headers configured by the user/environment.
+
+The application should allow the user to enter or configure:
+- Authorization/JWT
+- X-API-Key
+- CLIENT_ID
+- Cookie
+- Other custom headers
+
+These headers must be passed to the GraphQL API request.
+
+The application should support the same request structure that currently works in Postman.
+
+The goal is:
+
+Postman request
+      ↓
+Same URL + headers + GraphQL request body
+      ↓
+Backend
+      ↓
+Verizon GraphQL API
+      ↓
+JSON response
+      ↓
+Save as response.json
+      ↓
+Parse JSON
+      ↓
+Dashboard UI
