@@ -204,3 +204,359 @@ body {
         font-size: 1rem;
     }
 }
+
+
+
+Build a complete working web application called "API Response Analytics Dashboard".
+
+GOAL:
+I have APIs that I normally test using Postman. I want this application to directly call the API, receive the JSON response, save the response as response.json, parse the JSON, and display the useful information in a professional dashboard UI.
+
+IMPORTANT:
+Do NOT create only a static/mock UI.
+The application MUST actually call the API endpoint and process the real JSON response.
+
+TECHNOLOGY:
+- Frontend: HTML + CSS + JavaScript (or React if you think it is better)
+- Backend: Python FastAPI
+- The backend is responsible for calling the external API and saving the response JSON.
+- Use a clean project structure.
+- The application should run locally with one simple command.
+- Avoid unnecessary dependencies.
+
+MAIN FLOW:
+
+User
+  ↓
+Open Dashboard
+  ↓
+Enter/select API details
+  ↓
+Click "Fetch API"
+  ↓
+Backend sends HTTP request to the configured API
+  ↓
+Receive API JSON response
+  ↓
+Save it automatically as response.json
+  ↓
+Parse/analyze JSON
+  ↓
+Send processed data to frontend
+  ↓
+Display interactive dashboard
+
+UI REQUIREMENTS:
+
+Create a modern professional dashboard similar to the Catalog Analytics Dashboard style.
+
+Header:
+- "API Response Analytics Dashboard"
+- Subtitle: "API Response → JSON → Analytics"
+- Server status indicator
+- Last fetch time
+- Fetch status
+
+API Configuration section:
+- Environment dropdown: SIT / UAT / PROD
+- API URL input
+- HTTP Method dropdown: GET / POST / PUT / PATCH
+- Headers section
+- Authorization/token input
+- Request Body JSON editor for POST/PUT/PATCH
+- "Fetch API" button
+- "Save Response" button
+- "Load Saved" button
+- "Upload JSON" button as an optional fallback
+
+After clicking Fetch API:
+1. Send the request to the backend.
+2. Backend calls the configured API.
+3. Receive the actual response.
+4. Save the complete response to:
+   data/response.json
+5. Parse the JSON.
+6. Return the parsed result to the frontend.
+7. Update the dashboard automatically.
+
+Dashboard summary cards:
+- HTTP Status Code
+- Response Time
+- Response Size
+- Total JSON Records
+- Total Objects
+- Total Arrays
+- API Success/Failure
+- Last Updated
+
+JSON analysis:
+Automatically inspect the response structure.
+
+The application should work even when the JSON structure changes.
+
+Do NOT hard-code fields such as:
+"id", "name", "category", etc.
+
+Instead dynamically inspect the JSON.
+
+If the response is:
+
+{
+  "data": [
+    {
+      "id": 1001,
+      "name": "ABC",
+      "status": "ACTIVE"
+    }
+  ]
+}
+
+detect:
+- root type
+- arrays
+- objects
+- fields
+- nested objects
+- nested arrays
+- primitive values
+- record count
+
+If the response contains nested structures, show them in a readable hierarchy.
+
+MAIN TABLE:
+Create a dynamic table based on the JSON response.
+
+Features:
+- Search
+- Filter
+- Sort
+- Pagination
+- Column visibility
+- Expand row
+- Copy value
+- Export CSV
+- Export Excel
+- Download JSON
+
+For nested JSON, display useful parent information in the table and provide an expandable "View Details" section containing the complete JSON.
+
+JSON VIEWER:
+Add a professional JSON viewer:
+- Pretty formatted JSON
+- Expand/collapse objects
+- Expand/collapse arrays
+- Syntax highlighting
+- Copy JSON
+- Download response.json
+
+ERROR HANDLING:
+If API call fails:
+- Show clear error message
+- Show HTTP status if available
+- Show response body if available
+- Show connection error separately
+- Do not crash the application
+
+Examples:
+401 → "Unauthorized - check token"
+403 → "Forbidden"
+404 → "Endpoint not found"
+417 → "Expectation Failed"
+500 → "Server error"
+Connection refused → "Unable to connect to API"
+
+CORS:
+Handle CORS properly in the FastAPI backend.
+
+IMPORTANT SECURITY:
+Do not expose sensitive authorization tokens in frontend logs.
+Do not hard-code tokens.
+Allow headers/authentication to be configured through the UI or environment variables.
+
+RESPONSE FILE MANAGEMENT:
+
+Create:
+
+data/
+   response.json
+
+Every successful API request should overwrite/update response.json.
+
+Also maintain optional timestamped responses:
+
+data/history/
+   response_YYYYMMDD_HHMMSS.json
+
+"Load Saved" should load the latest response.json without calling the API.
+
+"Upload JSON" should allow me to upload any response.json manually and display it using the same dashboard.
+
+This means the application must support BOTH:
+
+1. Live API:
+Postman/API endpoint → Backend → response.json → Dashboard
+
+2. Existing JSON:
+Upload response.json → Dashboard
+
+API TESTING:
+Also create an equivalent Postman request/documentation showing how to call the backend.
+
+Backend endpoints should include something like:
+
+POST /api/fetch
+GET  /api/response
+POST /api/upload
+GET  /api/health
+
+POST /api/fetch should accept:
+
+{
+  "url": "...",
+  "method": "GET",
+  "headers": {},
+  "body": {}
+}
+
+and return:
+
+{
+  "success": true,
+  "status_code": 200,
+  "response_time_ms": 123,
+  "response_size": 4567,
+  "data": {...}
+}
+
+If the external API requires special authentication or headers, support arbitrary headers.
+
+UI DESIGN:
+Make it look like a real enterprise application, not a basic HTML page.
+
+Use:
+- Dark blue/blue professional theme
+- Cards
+- Rounded corners
+- Status badges
+- Responsive layout
+- Tables
+- Icons
+- Good spacing
+- Loading animation
+- Toast notifications
+- Success/error indicators
+
+Create a layout approximately like:
+
+---------------------------------------------------------
+ API Response Analytics Dashboard
+ API Response → JSON → Analytics
+
+ [Server ●] [Environment] [API URL] [Fetch API]
+
+ [HTTP 200] [Response Time] [JSON Records] [Response Size]
+---------------------------------------------------------
+
+ API Configuration
+ --------------------------------------------------------
+ Method | URL
+ Headers
+ Authorization
+ Request Body
+ [ FETCH API ]
+ --------------------------------------------------------
+
+ Response Analytics
+ --------------------------------------------------------
+ Summary cards / statistics
+ --------------------------------------------------------
+
+ JSON Response
+ --------------------------------------------------------
+ Dynamic table
+ Search | Filters | Columns | Export
+ --------------------------------------------------------
+
+ Expanded JSON Details
+ --------------------------------------------------------
+
+PROJECT STRUCTURE:
+
+Create a clean structure similar to:
+
+api-response-dashboard/
+│
+├── backend/
+│   ├── main.py
+│   ├── api/
+│   ├── services/
+│   ├── models/
+│   └── utils/
+│
+├── frontend/
+│   ├── index.html
+│   ├── style.css
+│   └── app.js
+│
+├── data/
+│   ├── response.json
+│   └── history/
+│
+├── postman/
+│   └── API-Response-Dashboard.postman_collection.json
+│
+├── requirements.txt
+├── README.md
+└── start-dashboard.bat
+
+WINDOWS REQUIREMENT:
+I am running this on Windows.
+
+Create start-dashboard.bat so that I can simply double-click it and start the application.
+
+Also provide the exact commands:
+
+1. Create virtual environment
+2. Install dependencies
+3. Start backend
+4. Open dashboard
+
+For example:
+
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+python backend/main.py
+
+Then open:
+
+http://localhost:8000
+
+IMPORTANT IMPLEMENTATION REQUIREMENTS:
+
+- The project must actually work.
+- Do not leave TODOs.
+- Do not use fake API responses.
+- Do not hard-code a particular JSON structure.
+- Dynamically analyze arbitrary JSON.
+- Handle GET and POST APIs.
+- Handle headers and authorization.
+- Save the real API response as response.json.
+- Make the UI update automatically after fetching.
+- Make errors understandable to a non-expert user.
+- Include README with complete setup and usage instructions.
+- Include a sample response.json only for testing, but clearly separate it from the real API flow.
+- Make sure frontend and backend communicate correctly.
+- Test the application before finishing.
+
+FINAL OUTPUT:
+After creating the project, explain:
+1. What files were created.
+2. How the API request flows through the application.
+3. How response.json is generated.
+4. How the JSON is converted into the dashboard.
+5. Exact command to run the application.
+6. Where I should enter my actual API URL, headers and token.
+7. How to test it using Postman.
+
+Most importantly, build the complete application files directly. Do not just give me sample code or an explanation.
