@@ -50,3 +50,46 @@ controls.right.addEventListener("click", () => (inputDir = { x: 1, y: 0 }));
 </body>
 </html>
 
+
+
+
+
+Step 1 – Controller: The ServiceContinuityController receives the /continuity-options GET request, validates the ServiceContinuityRequest, logs the request details, and invokes getServiceContinuityOptions() in the service layer to process the request.
+Step 2 – Service Layer: ServiceContinuityServiceImpl
+
+The service checks the product category. For HANDSET, the product serial number is directly used as the ESN. For LINE, it calls RetrieveESNService to retrieve the device details and ESN.
+
+Step 3 – Retrieve ESN: RetrieveESNServiceImpl
+
+RetrieveESNServiceImpl builds the Device Service URL with the product category and serial number, then makes a GET request using RestTemplate. The Device Service response is returned as DeviceServiceResponse, from which the ESN is obtained.
+Client
+  ↓
+ServiceContinuityController
+  ↓
+/continuity-options
+  ↓
+ServiceContinuityServiceImpl
+  ↓
+Check Product Category
+  ↓
+ ┌───────────────────────┐
+ │                       │
+HANDSET                 LINE
+ │                       │
+ESN =                  retrieveESNService
+Serial Number              ↓
+                        RetrieveESNServiceImpl
+                            ↓
+                     Build Device URL
+                            ↓
+                     Add category +
+                     serial number
+                            ↓
+                     RestTemplate GET
+                            ↓
+                      Device Service
+                            ↓
+                   DeviceServiceResponse
+                            ↓
+                         Get ESN
+
