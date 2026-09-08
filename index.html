@@ -110,3 +110,23 @@ processing          ↓
               └──────┬──────┘
                      ↓
              Continue Processing
+
+
+
+
+Step 5 – Source & Product Offerings
+After retrieving the ESN, the service gets the source from the request and checks the brand. If the brand is TOTAL_WIRELESS, STRAIGHT_TALK, or TRACFONE, it calls fetchProductOfferings() with the category, ESN, brand, and source.
+
+
+
+ESN Retrieved
+     ↓
+Get Source
+     ↓
+Check Brand
+     ↓
+TOTAL_WIRELESS / STRAIGHT_TALK / TRACFONE
+     ↓
+fetchProductOfferings()
+     ↓
+Product Offerings Response
