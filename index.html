@@ -130,3 +130,27 @@ TOTAL_WIRELESS / STRAIGHT_TALK / TRACFONE
 fetchProductOfferings()
      ↓
 Product Offerings Response
+
+
+Step 5 – Fetch Product Offerings
+
+Short Description:
+fetchProductOfferings() builds the Catalog Service URL with the ESN, brand, and source, sends a GET request using RestTemplate, and returns the ProductOfferingsResponse.
+
+Flow:
+
+fetchProductOfferings()
+        ↓
+Build Catalog Service URL
+        ↓
+Add Filter + ESN
+        ↓
+Add Brand + Source
+        ↓
+GET Request
+        ↓
+Catalog Service
+        ↓
+ProductOfferingsResponse
+        ↓
+Return Response
