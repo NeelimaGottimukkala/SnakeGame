@@ -51,9 +51,6 @@ controls.right.addEventListener("click", () => (inputDir = { x: 1, y: 0 }));
 </html>
 
 
-
-
-
 Step 1 – Controller: The ServiceContinuityController receives the /continuity-options GET request, validates the ServiceContinuityRequest, logs the request details, and invokes getServiceContinuityOptions() in the service layer to process the request.
 Step 2 – Service Layer: ServiceContinuityServiceImpl
 
@@ -93,3 +90,23 @@ Serial Number              ↓
                             ↓
                          Get ESN
 
+Step 4 – Source Processing
+After the ESN is retrieved, the service gets the source from the request. It checks whether the source is available and processes the source accordingly. If the source is empty/null or Rtr, the flow continues without using a specific source. For other valid source values, the source is considered for further processing.
+
+Get Source from Request
+        ↓
+Is Source empty/null?
+   ↙              ↘
+ YES               NO
+  ↓                 ↓
+Continue        Check Source
+processing          ↓
+              Is Source = Rtr?
+               ↙          ↘
+             YES           NO
+              ↓             ↓
+        Exclude Rtr     Use Source
+              ↓             ↓
+              └──────┬──────┘
+                     ↓
+             Continue Processing
