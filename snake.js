@@ -143,88 +143,59 @@ playAgainBtn.addEventListener('click', () => {
 window.requestAnimationFrame(main);
 #hi
 
-Here is the content for your document:
+Visible Shopping Cart – KT Notes
 
-# Visible Shopping Cart: Session Notes
+1. Overall Customer Journey
 
-## 1. Brand Landscape
-- Visible, Total Wireless, and Straight Talk run on the same core code, with brand differences handled through configuration.
-- Some configurable "flavors" are switched on when needed. Whenever a brand configuration changes, the related code must be updated.
-- Walmart-side brands (Walmart telephone, WIS / Walmart Information System) came from Verizon's acquisitions.
-- Verizon also acquired TrackPhone. Its core is mostly used in Total Wireless, and the same code is used for Visible with configurable flavors.
+The customer visits visible.com (SOE) and selects a device, plan or wearable. The selected items are added to the shopping cart, followed by checkout, where the customer reviews the cart details, applies promotional offers, enters shipping information and submits the order.
 
-## 2. Code and Governance
-- BAU is the old code. VXP is the new code being developed. VXP is built on CXP and sits under NSA.
-- Most repositories extend the CXP code. Plugins and repositories are available here, so most code is taken from here.
-- All changes must be accepted by the governance team. Members mentioned: Pooja, Manachandra, Pulki, Praveen Thambi, and the manager.
-- Governance rules are strict. For example, when a request needs data from a microservice, the microservice must return all required data in one call, not repeated calls.
-- VXP has more flexible standards than BAU, which is the goal. BAU has stricter standards.
+2. Shopping Cart Actions
 
-## 3. Project Overview
-- The Visible shopping cart is a telecom shopping application, similar to Flipkart, for buying devices, wearables, plans, insurance, SIM cards, and home internet/broadband.
-- Accessories and variants (e.g., AirPods) are offered through the same flow.
+The process starts with CreateCart / AddToCart, which creates a cart and generates a unique Cart ID. The same Cart ID is used for all subsequent operations.
 
-### Plans
-- Voice plans, data plans, and ILD (International Long Distance dialing) plans.
-- HPP plans are insurance. If a device is lost or stolen, a replacement is offered for a nominal cost, charged monthly.
-- Visible Product Plans (VPP) is the Visible name for HPP. Total Wireless calls them HPP.
-- Visible plans: Visible, Visible Plus, and Visible Plus Pro, in monthly and annual options.
+When the customer adds or modifies items, UpdateCart is triggered. The customer can then proceed to checkout to view all selected cart items.
 
-### SIMs
-- Two types: physical SIM and digital SIM (eSIM).
-- A physical SIM is bought as a new SIM. An eSIM is free digitally.
+Other actions include AddPromo, RemovePromo, ShippingAddress and SubmitAction (Validate), which validates and submits the order.
 
-### Content Source
+3. Intermediate Actions
 
-- Product data comes from DCM (Digital Catalog Management), managed by Technotree.
-- Retrieval is from Azure.
-- Product text (stock status, promos, 5G labels) and product images come from DCM. Images are linked in DCM and stored in Amazon S3.
-- Variants (e.g., 256GB, 512GB) also come from DCM.
+The following actions are performed between checkout and order submission:
 
-## 4. Environments
-- **Dev:** Development branch (SATA.visible.com).
-- **SIT1 and SIT2:** QA and testing (SIT1.visible.com).
-- **Canary:** Pre-production, tested by business owners and the testing team.
-- **Production:** Live site.
-- Neelima's access: mainly Dev and SIT1. No access to Canary or production, which testers can access.
+- RetrieveCart: Retrieves the current cart details.
+- CartQuotation: Retrieves pricing details of all cart items, including devices, plans and wearables.
+- RevenueAllocation: Handles item-level revenue distribution and applicable tax details.
 
-## 5. Ways to Get a Device
-- **Purchase outright.**
-- **Financing (EMI):** Monthly installments, e.g., 36 months with no interest. Eligibility is checked at checkout.
-- **Lease/rental:** Pay a monthly amount to use the device, then return it or exchange it.
-- **BYOP (Bring Your Own Phone or Product):** The customer brings their own device, and only plans and SIMs are sold. Apple or Android watches can be brought too.
-- **Upgrade program:** For example, moving from iPhone 16 to iPhone 18.
-- **Trade-in program:** Get an estimate for the old device, then send it in. The device is sold to a third-party agent, and the amount is passed on to Visible.
-- **Visible Payback:** A loyalty program.
-- **Promo codes:** Applied at the cart for discounts, e.g., a $6 premium discount. Managed by the business team.
+4. Backend Request Flow
 
-## 6. Website Flow (Production Walkthrough)
-1. Browse the device list. Out-of-stock items are marked as such.
-2. Select a device and capacity. The price shown is the base price after discounts, with taxes and fees included.
-3. Add a plan. If none is added, the item is device-only.
-4. "Add a plan" asks for the customer's state, and the plan is added based on that state.
-5. Add-ons: VPP/HPP insurance, physical or digital SIM, home internet, watches.
-6. The cart shows the device, plan, and SIM items, with the pre-tax quotation first.
-7. Checkout requires an account (create one or log in). Guest checkout has been removed.
-8. Enter a phone number.
-9. Sales tax is calculated and shown.
-10. Choose a shipping option: standard post, express post, or premium courier such as DTDC. Some options cost extra, and delivery times are shown in business days.
-11. Choose a payment method.
-12. Pay, then receive an order ID.
+SOE sends requests in JSON/XML format to the Intermediate Service, which orchestrates and modifies the requests into the format expected by VXP services.
 
-A customer can buy a device alone, a plan alone, or both.
+The request then reaches VXP Shopping Aggregate, which acts as the main entry point and coordinates calls to Shopping Cart Domain and Shipping Services.
 
-## 7. Tangible vs. Intangible
-- **Tangible (touchable):** Devices, physical SIMs, home internet devices, and variants.
-- **Intangible (not touchable):** Plans, insurance (VPP/HPP), and eSIMs.
+Request Flow:
 
-## 8. Pricing and Tax
-- Example: A TV at 65,000 plus a stabilizer at 5,000 totals 70,000. Adding 10,000 of insurance brings it to 80,000. Checkout then shows the total with taxes.
-- Tax types: GST (India context), and municipal and state taxes (US context). Tax is computed by the tax engine.
+SOE → Intermediate Service → VXP Shopping Aggregate → VXP Shopping Cart Domain
 
-## 9. Open Items to Confirm
-- The exact name of the tax component ("UTE" in the recording).
-- The governance team name ("Legion" in the recording).
-- The exact shipping charge amount ("$20" was mentioned).
-- The exact checkout shipping option names and business-day estimates.
-- The exact trade-in partner flow.
+Shipping Services also integrates with the Shopping Aggregate and can have a direct entry from SOE.
+
+5. VXP Microservices
+
+The three main services discussed during KT are:
+
+1. VXP Shopping Aggregate: Main entry point for shopping-related requests and service orchestration.
+2. VXP Shopping Cart Domain: Handles shopping cart-related business operations.
+3. VXP Shipping Services: Handles shipping-related operations.
+
+6. Other Backend Components
+
+- BRM: Deals
+- CustomerDomainService: PartyInfo
+- ProductService: Product-related operations
+- DCMAdapter: DCM integration
+
+7. Post-Order Process
+
+Once the order is submitted, jBPM handles the post-order workflow, including SIM activation and fleet tracking. The process continues until the customer receives the device or plan.
+
+Overall Understanding
+
+SOE handles customer interactions, the Intermediate Service manages request orchestration, and VXP services handle shopping cart, quotation and shipping operations. The Shopping Aggregate coordinates the backend service calls, while jBPM manages the post-order activation and tracking process.
