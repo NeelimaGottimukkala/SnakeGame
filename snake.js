@@ -154,9 +154,9 @@ HTML dashboard + CSV.
 Setup (once) - no pip install needed, uses only built-in Python:
     Create a Personal Access Token in onejira:
         profile picture -> Profile -> Personal Access Tokens -> Create token
-    Then set it as an environment variable (don't hardcode it):
-        Windows (PowerShell):  $env:JIRA_TOKEN = "your-token"
-        Windows (cmd):         set JIRA_TOKEN=your-token
+    When you run the script it asks you to paste the token (input is hidden).
+    Optional: set it once per terminal to skip the prompt:
+        $env:JIRA_TOKEN = "your-token"
 
 Run:
     python jira_dashboard.py VNQE-36881 VNQE-36900 VNQE-37012
@@ -167,6 +167,7 @@ Output: jira_dashboard.html (open in browser) and jira_dashboard.csv
 """
 import argparse
 import csv
+import getpass
 import html
 import json
 import os
@@ -400,9 +401,10 @@ def main():
     keys = parse_ids(args)
     if not keys:
         sys.exit("No ticket IDs given. Example: python jira_dashboard.py VNQE-36881")
-    token = os.environ.get("JIRA_TOKEN")
+    token = os.environ.get("JIRA_TOKEN") or getpass.getpass(
+        "Paste your Jira Personal Access Token (typing is hidden) and press Enter: ").strip()
     if not token:
-        sys.exit("Set your Jira Personal Access Token first:  $env:JIRA_TOKEN = \"...\"")
+        sys.exit("No token entered.")
     s = Jira(token, not args.no_verify)
     print(f"Looking up field IDs on {JIRA_URL} ...")
     field_ids = find_field_ids(s)
@@ -418,3 +420,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
