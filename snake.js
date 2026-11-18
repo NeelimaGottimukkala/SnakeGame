@@ -151,8 +151,7 @@ Give it VNQE ticket IDs -> it pulls Created, Resolved, Brand, Reporting Team
 (plus Status, Priority, Environment, Summary) from onejira and builds an
 HTML dashboard + CSV.
 
-Setup (once):
-    pip install requests
+Setup (once) - no pip install needed, uses only built-in Python:
     Create a Personal Access Token in onejira:
         profile picture -> Profile -> Personal Access Tokens -> Create token
     Then set it as an environment variable (don't hardcode it):
@@ -172,10 +171,11 @@ import html
 import json
 import os
 import re
+import ssl
 import sys
+import urllib.error
+import urllib.request
 from datetime import datetime
-
-import requests
 
 JIRA_URL = "https://onejira.verizon.com"
 
@@ -197,18 +197,34 @@ def parse_ids(args):
     return list(dict.fromkeys(ids))  # de-duplicate, keep order
 
 
-def session(token, verify):
-    s = requests.Session()
-    s.headers.update({"Authorization": f"Bearer {token}", "Accept": "application/json"})
-    s.verify = verify
-    return s
+class Jira:
+    """Tiny Jira client using only the standard library."""
+
+    def __init__(self, token, verify):
+        self.headers = {"Authorization": f"Bearer {token}", "Accept": "application/json",
+                        "Content-Type": "application/json"}
+        self.ctx = ssl.create_default_context() if verify else ssl._create_unverified_context()
+
+    def call(self, method, path, body=None, timeout=120):
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(JIRA_URL + path, data=data, headers=self.headers, method=method)
+        try:
+            with urllib.request.urlopen(req, context=self.ctx, timeout=timeout) as r:
+                return json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", "ignore")[:300]
+            if e.code == 401:
+                sys.exit("401 Unauthorized - check JIRA_TOKEN (expired or copied wrong?)")
+            sys.exit(f"Jira returned HTTP {e.code} for {path}: {detail}")
+        except urllib.error.URLError as e:
+            if isinstance(e.reason, ssl.SSLError):
+                sys.exit(f"SSL error: {e.reason}\nRe-run with --no-verify")
+            sys.exit(f"Could not reach {JIRA_URL}: {e.reason}")
 
 
 def find_field_ids(s):
-    r = s.get(f"{JIRA_URL}/rest/api/2/field", timeout=60)
-    r.raise_for_status()
     by_name = {}
-    for f in r.json():
+    for f in s.call("GET", "/rest/api/2/field"):
         by_name.setdefault(f["name"].strip().lower(), f["id"])
     ids = {}
     for key, name in CUSTOM_FIELDS.items():
@@ -245,14 +261,10 @@ def fetch(s, keys, field_ids):
     rows, found = [], set()
     for i in range(0, len(keys), 50):
         batch = keys[i:i + 50]
-        r = s.post(
-            f"{JIRA_URL}/rest/api/2/search",
-            json={"jql": f"key in ({','.join(batch)})", "fields": fields,
-                  "maxResults": 50, "validateQuery": "warn"},
-            timeout=120,
-        )
-        r.raise_for_status()
-        for issue in r.json().get("issues", []):
+        result = s.call("POST", "/rest/api/2/search",
+                        {"jql": f"key in ({','.join(batch)})", "fields": fields,
+                         "maxResults": 50, "validateQuery": "warn"})
+        for issue in result.get("issues", []):
             f = issue["fields"]
             created, resolved = parse_dt(f.get("created")), parse_dt(f.get("resolutiondate"))
             found.add(issue["key"])
@@ -391,10 +403,7 @@ def main():
     token = os.environ.get("JIRA_TOKEN")
     if not token:
         sys.exit("Set your Jira Personal Access Token first:  $env:JIRA_TOKEN = \"...\"")
-    if args.no_verify:
-        requests.packages.urllib3.disable_warnings()
-
-    s = session(token, not args.no_verify)
+    s = Jira(token, not args.no_verify)
     print(f"Looking up field IDs on {JIRA_URL} ...")
     field_ids = find_field_ids(s)
     print(f"Fetching {len(keys)} ticket(s) ...")
