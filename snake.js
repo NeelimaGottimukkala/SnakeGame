@@ -143,59 +143,269 @@ playAgainBtn.addEventListener('click', () => {
 window.requestAnimationFrame(main);
 #hi
 
-Visible Shopping Cart – KT Notes
 
-1. Overall Customer Journey
+"""
+Jira ticket dashboard
+---------------------
+Give it VNQE ticket IDs -> it pulls Created, Resolved, Brand, Reporting Team
+(plus Status, Priority, Environment, Summary) from onejira and builds an
+HTML dashboard + CSV.
 
-The customer visits visible.com (SOE) and selects a device, plan or wearable. The selected items are added to the shopping cart, followed by checkout, where the customer reviews the cart details, applies promotional offers, enters shipping information and submits the order.
+Setup (once):
+    pip install requests
+    Create a Personal Access Token in onejira:
+        profile picture -> Profile -> Personal Access Tokens -> Create token
+    Then set it as an environment variable (don't hardcode it):
+        Windows (PowerShell):  $env:JIRA_TOKEN = "your-token"
+        Windows (cmd):         set JIRA_TOKEN=your-token
 
-2. Shopping Cart Actions
+Run:
+    python jira_dashboard.py VNQE-36881 VNQE-36900 VNQE-37012
+    python jira_dashboard.py -f tickets.txt          (one ID per line, or comma separated)
+    python jira_dashboard.py -f tickets.txt --no-verify   (if corporate SSL cert errors)
 
-The process starts with CreateCart / AddToCart, which creates a cart and generates a unique Cart ID. The same Cart ID is used for all subsequent operations.
+Output: jira_dashboard.html (open in browser) and jira_dashboard.csv
+"""
+import argparse
+import csv
+import html
+import json
+import os
+import re
+import sys
+from datetime import datetime
 
-When the customer adds or modifies items, UpdateCart is triggered. The customer can then proceed to checkout to view all selected cart items.
+import requests
 
-Other actions include AddPromo, RemovePromo, ShippingAddress and SubmitAction (Validate), which validates and submits the order.
+JIRA_URL = "https://onejira.verizon.com"
 
-3. Intermediate Actions
+# Custom field names exactly as they appear on the ticket screen.
+# The script looks up their internal IDs (customfield_xxxxx) automatically.
+CUSTOM_FIELDS = {
+    "brand": "Brand",
+    "reporting_team": "Reporting Team",
+    "environment": "Environment",
+}
 
-The following actions are performed between checkout and order submission:
 
-- RetrieveCart: Retrieves the current cart details.
-- CartQuotation: Retrieves pricing details of all cart items, including devices, plans and wearables.
-- RevenueAllocation: Handles item-level revenue distribution and applicable tax details.
+def parse_ids(args):
+    raw = list(args.ids)
+    if args.file:
+        with open(args.file, encoding="utf-8") as fh:
+            raw.append(fh.read())
+    ids = re.findall(r"[A-Z][A-Z0-9]+-\d+", " ".join(raw).upper())
+    return list(dict.fromkeys(ids))  # de-duplicate, keep order
 
-4. Backend Request Flow
 
-SOE sends requests in JSON/XML format to the Intermediate Service, which orchestrates and modifies the requests into the format expected by VXP services.
+def session(token, verify):
+    s = requests.Session()
+    s.headers.update({"Authorization": f"Bearer {token}", "Accept": "application/json"})
+    s.verify = verify
+    return s
 
-The request then reaches VXP Shopping Aggregate, which acts as the main entry point and coordinates calls to Shopping Cart Domain and Shipping Services.
 
-Request Flow:
+def find_field_ids(s):
+    r = s.get(f"{JIRA_URL}/rest/api/2/field", timeout=60)
+    r.raise_for_status()
+    by_name = {}
+    for f in r.json():
+        by_name.setdefault(f["name"].strip().lower(), f["id"])
+    ids = {}
+    for key, name in CUSTOM_FIELDS.items():
+        fid = by_name.get(name.lower())
+        if not fid:
+            print(f"  ! Field '{name}' not found - it will show blank")
+        ids[key] = fid
+    return ids
 
-SOE → Intermediate Service → VXP Shopping Aggregate → VXP Shopping Cart Domain
 
-Shipping Services also integrates with the Shopping Aggregate and can have a direct entry from SOE.
+def to_text(v):
+    """Turn any Jira field value (string, option, list, user) into plain text."""
+    if v is None:
+        return ""
+    if isinstance(v, list):
+        return ", ".join(filter(None, (to_text(x) for x in v)))
+    if isinstance(v, dict):
+        for k in ("value", "name", "displayName", "key"):
+            if v.get(k):
+                return str(v[k])
+        return ""
+    return str(v)
 
-5. VXP Microservices
 
-The three main services discussed during KT are:
+def parse_dt(s):
+    if not s:
+        return None
+    return datetime.strptime(s, "%Y-%m-%dT%H:%M:%S.%f%z")
 
-1. VXP Shopping Aggregate: Main entry point for shopping-related requests and service orchestration.
-2. VXP Shopping Cart Domain: Handles shopping cart-related business operations.
-3. VXP Shipping Services: Handles shipping-related operations.
 
-6. Other Backend Components
+def fetch(s, keys, field_ids):
+    fields = ["summary", "status", "priority", "created", "resolutiondate"]
+    fields += [f for f in field_ids.values() if f]
+    rows, found = [], set()
+    for i in range(0, len(keys), 50):
+        batch = keys[i:i + 50]
+        r = s.post(
+            f"{JIRA_URL}/rest/api/2/search",
+            json={"jql": f"key in ({','.join(batch)})", "fields": fields,
+                  "maxResults": 50, "validateQuery": "warn"},
+            timeout=120,
+        )
+        r.raise_for_status()
+        for issue in r.json().get("issues", []):
+            f = issue["fields"]
+            created, resolved = parse_dt(f.get("created")), parse_dt(f.get("resolutiondate"))
+            found.add(issue["key"])
+            rows.append({
+                "key": issue["key"],
+                "summary": f.get("summary") or "",
+                "status": to_text(f.get("status")),
+                "priority": to_text(f.get("priority")),
+                "brand": to_text(f.get(field_ids["brand"])) if field_ids["brand"] else "",
+                "reporting_team": to_text(f.get(field_ids["reporting_team"])) if field_ids["reporting_team"] else "",
+                "environment": to_text(f.get(field_ids["environment"])) if field_ids["environment"] else "",
+                "created": created.strftime("%Y-%m-%d %H:%M") if created else "",
+                "resolved": resolved.strftime("%Y-%m-%d %H:%M") if resolved else "",
+                "days_to_resolve": round((resolved - created).total_seconds() / 86400, 1)
+                if created and resolved else None,
+            })
+    missing = [k for k in keys if k not in found]
+    order = {k: n for n, k in enumerate(keys)}
+    rows.sort(key=lambda x: order.get(x["key"], 1e9))
+    return rows, missing
 
-- BRM: Deals
-- CustomerDomainService: PartyInfo
-- ProductService: Product-related operations
-- DCMAdapter: DCM integration
 
-7. Post-Order Process
+def write_csv(rows, path):
+    cols = ["key", "summary", "brand", "reporting_team", "environment", "status",
+            "priority", "created", "resolved", "days_to_resolve"]
+    with open(path, "w", newline="", encoding="utf-8-sig") as fh:
+        w = csv.DictWriter(fh, fieldnames=cols)
+        w.writeheader()
+        w.writerows(rows)
 
-Once the order is submitted, jBPM handles the post-order workflow, including SIM activation and fleet tracking. The process continues until the customer receives the device or plan.
 
-Overall Understanding
+def write_html(rows, missing, path):
+    data = json.dumps(rows).replace("</", "<\\/")
+    miss = html.escape(", ".join(missing))
+    page = TEMPLATE.replace("__DATA__", data).replace("__JIRA__", JIRA_URL) \
+        .replace("__MISSING__", f"Not found / no access: {miss}" if missing else "") \
+        .replace("__GENERATED__", datetime.now().strftime("%d %b %Y, %H:%M"))
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(page)
 
-SOE handles customer interactions, the Intermediate Service manages request orchestration, and VXP services handle shopping cart, quotation and shipping operations. The Shopping Aggregate coordinates the backend service calls, while jBPM manages the post-order activation and tracking process.
+
+TEMPLATE = r"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Jira Ticket Dashboard</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1d2330;--mute:#6b7280;--line:#e5e7eb;--acc:#cd040b;--bar:#3b6fd8}
+*{box-sizing:border-box}body{margin:0;font:14px/1.45 "Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+header{padding:20px 28px;background:var(--card);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px}
+h1{margin:0;font-size:20px}h1 span{color:var(--acc)}.sub{color:var(--mute);font-size:12px}
+main{padding:20px 28px;max-width:1400px;margin:auto}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.kpi b{display:block;font-size:26px;font-variant-numeric:tabular-nums}.kpi small{color:var(--mute)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;margin-bottom:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.card h3{margin:0 0 10px;font-size:14px}
+.row{display:grid;grid-template-columns:140px 1fr 40px;gap:8px;align-items:center;margin:6px 0;cursor:pointer}
+.row .lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.track{background:#eef1f6;border-radius:4px;height:14px}.fill{background:var(--bar);height:100%;border-radius:4px}
+.row.on .fill{background:var(--acc)}.row .n{text-align:right;font-variant-numeric:tabular-nums}
+.tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+input,select,button{font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:#fff}
+input{flex:1;min-width:200px}button{cursor:pointer}
+table{width:100%;border-collapse:collapse}th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-size:12px;color:var(--mute);cursor:pointer;user-select:none;white-space:nowrap;position:sticky;top:0;background:#fff}
+td.num{text-align:right;font-variant-numeric:tabular-nums}a{color:var(--bar);text-decoration:none;font-weight:600}
+.pill{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;background:#eef1f6}
+.pill.done{background:#e3f4e8;color:#1e7a3c}.miss{color:var(--acc);font-size:12px;margin:-6px 0 12px}
+.wrap{overflow:auto;max-height:70vh}
+</style></head><body>
+<header><h1><span>■</span> Jira Ticket Dashboard</h1><div class="sub">Generated __GENERATED__ · source: __JIRA__</div></header>
+<main>
+<div class="miss">__MISSING__</div>
+<div class="kpis" id="kpis"></div>
+<div class="grid">
+  <div class="card"><h3>By Brand</h3><div id="byBrand"></div></div>
+  <div class="card"><h3>By Reporting Team</h3><div id="byTeam"></div></div>
+  <div class="card"><h3>Avg days to resolve by Brand</h3><div id="ttr"></div></div>
+</div>
+<div class="card">
+  <div class="tools">
+    <input id="q" placeholder="Search ticket, summary, brand, team...">
+    <select id="fBrand"></select><select id="fTeam"></select>
+    <button id="reset">Reset</button>
+  </div>
+  <div class="wrap"><table><thead><tr id="head"></tr></thead><tbody id="body"></tbody></table></div>
+</div>
+</main>
+<script>
+const DATA=__DATA__, JIRA="__JIRA__";
+const COLS=[["key","Ticket"],["summary","Summary"],["brand","Brand"],["reporting_team","Reporting Team"],
+ ["environment","Env"],["status","Status"],["created","Created"],["resolved","Resolved"],["days_to_resolve","Days"]];
+let sortK="created",sortDir=1;
+const $=id=>document.getElementById(id), esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const uniq=k=>[...new Set(DATA.map(r=>r[k]||"(blank)"))].sort();
+function opts(el,k,label){el.innerHTML=`<option value="">All ${label}</option>`+uniq(k).map(v=>`<option>${esc(v)}</option>`).join("")}
+opts($("fBrand"),"brand","brands");opts($("fTeam"),"reporting_team","teams");
+function rows(){const q=$("q").value.toLowerCase(),b=$("fBrand").value,t=$("fTeam").value;
+ return DATA.filter(r=>(!b||(r.brand||"(blank)")===b)&&(!t||(r.reporting_team||"(blank)")===t)&&
+  (!q||Object.values(r).join(" ").toLowerCase().includes(q)))}
+function bars(el,pairs,sel,fmt){const max=Math.max(1,...pairs.map(p=>p[1]));
+ el.innerHTML=pairs.length?pairs.map(([k,v])=>`<div class="row ${sel===k?"on":""}" data-k="${esc(k)}"><span class="lbl" title="${esc(k)}">${esc(k)}</span><div class="track"><div class="fill" style="width:${v/max*100}%"></div></div><span class="n">${fmt?fmt(v):v}</span></div>`).join(""):"<small>No data</small>"}
+function count(rs,k){const m={};rs.forEach(r=>{const v=r[k]||"(blank)";m[v]=(m[v]||0)+1});return Object.entries(m).sort((a,b)=>b[1]-a[1])}
+function render(){const rs=rows(),res=rs.filter(r=>r.resolved),d=res.map(r=>r.days_to_resolve).filter(x=>x!=null);
+ const avg=d.length?(d.reduce((a,b)=>a+b,0)/d.length).toFixed(1):"–";
+ $("kpis").innerHTML=[["Tickets",rs.length],["Resolved",res.length],["Open",rs.length-res.length],["Avg days to resolve",avg],
+  ["Brands",new Set(rs.map(r=>r.brand)).size],["Reporting teams",new Set(rs.map(r=>r.reporting_team)).size]]
+  .map(([l,v])=>`<div class="kpi"><b>${v}</b><small>${l}</small></div>`).join("");
+ bars($("byBrand"),count(rs,"brand"),$("fBrand").value);bars($("byTeam"),count(rs,"reporting_team"),$("fTeam").value);
+ const g={};res.forEach(r=>{if(r.days_to_resolve==null)return;const k=r.brand||"(blank)";(g[k]=g[k]||[]).push(r.days_to_resolve)});
+ bars($("ttr"),Object.entries(g).map(([k,v])=>[k,v.reduce((a,b)=>a+b,0)/v.length]).sort((a,b)=>b[1]-a[1]),null,v=>v.toFixed(1));
+ $("head").innerHTML=COLS.map(([k,l])=>`<th data-k="${k}">${l}${sortK===k?(sortDir>0?" ▲":" ▼"):""}</th>`).join("");
+ rs.sort((a,b)=>{const x=a[sortK]??"",y=b[sortK]??"";return (x>y?1:x<y?-1:0)*sortDir});
+ $("body").innerHTML=rs.map(r=>`<tr><td><a href="${JIRA}/browse/${esc(r.key)}" target="_blank">${esc(r.key)}</a></td><td>${esc(r.summary)}</td><td>${esc(r.brand)}</td><td>${esc(r.reporting_team)}</td><td>${esc(r.environment)}</td><td><span class="pill ${/closed|done|resolved/i.test(r.status)?"done":""}">${esc(r.status)}</span></td><td>${esc(r.created)}</td><td>${esc(r.resolved)||"–"}</td><td class="num">${r.days_to_resolve??"–"}</td></tr>`).join("")}
+$("head").onclick=e=>{const k=e.target.dataset.k;if(!k)return;sortDir=sortK===k?-sortDir:1;sortK=k;render()};
+$("byBrand").onclick=e=>{const r=e.target.closest(".row");if(r){$("fBrand").value=$("fBrand").value===r.dataset.k?"":r.dataset.k;render()}};
+$("byTeam").onclick=e=>{const r=e.target.closest(".row");if(r){$("fTeam").value=$("fTeam").value===r.dataset.k?"":r.dataset.k;render()}};
+["q","fBrand","fTeam"].forEach(id=>$(id).oninput=render);
+$("reset").onclick=()=>{$("q").value=$("fBrand").value=$("fTeam").value="";render()};
+render();
+</script></body></html>"""
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Build a dashboard from Jira ticket IDs")
+    ap.add_argument("ids", nargs="*", help="Ticket IDs, e.g. VNQE-36881")
+    ap.add_argument("-f", "--file", help="Text file with ticket IDs")
+    ap.add_argument("-o", "--out", default="jira_dashboard", help="Output name (no extension)")
+    ap.add_argument("--no-verify", action="store_true", help="Skip SSL check (corporate proxy)")
+    args = ap.parse_args()
+
+    keys = parse_ids(args)
+    if not keys:
+        sys.exit("No ticket IDs given. Example: python jira_dashboard.py VNQE-36881")
+    token = os.environ.get("JIRA_TOKEN")
+    if not token:
+        sys.exit("Set your Jira Personal Access Token first:  $env:JIRA_TOKEN = \"...\"")
+    if args.no_verify:
+        requests.packages.urllib3.disable_warnings()
+
+    s = session(token, not args.no_verify)
+    print(f"Looking up field IDs on {JIRA_URL} ...")
+    field_ids = find_field_ids(s)
+    print(f"Fetching {len(keys)} ticket(s) ...")
+    rows, missing = fetch(s, keys, field_ids)
+
+    write_csv(rows, args.out + ".csv")
+    write_html(rows, missing, args.out + ".html")
+    print(f"Done: {len(rows)} ticket(s) -> {args.out}.html and {args.out}.csv")
+    if missing:
+        print("Not found / no access:", ", ".join(missing))
+
+
+if __name__ == "__main__":
+    main()
